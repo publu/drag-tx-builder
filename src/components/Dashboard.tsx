@@ -20,6 +20,7 @@ import useServices from '../hooks/useServices';
 import { ProposedTransaction } from '../typings/models';
 import WidgetWrapper from './WidgetWrapper';
 // import { Networks } from '@kingkongswap/safe-apps-sdk';
+import { FileUploader } from "react-drag-drop-files";
 
 const ButtonContainer = styled.div`
   display: flex;
@@ -185,6 +186,7 @@ const Dashboard = () => {
 
       setInputCache([]);
       setTransactions(transactions);
+      console.log("transactions:", transactions);
       setSelectedMethodIndex(0);
       setValue('');
     } catch (e) {
@@ -235,10 +237,32 @@ const Dashboard = () => {
       return input.type;
     }
   };
-
+  
+  const fileTypes = ["json"];
+  const [file, setFile] = useState(null);
+  const handleChange = (file: any) => {
+    console.log(file)
+    let reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = function () {
+        console.log(reader.result)
+        const data = String(reader.result).split(",")[1]
+        console.log(JSON.parse(atob(String(data))))
+        setInputCache([]);
+        setTransactions(JSON.parse(atob(String(data))));
+        console.log("transactions:", JSON.parse(atob(String(data))));
+        setSelectedMethodIndex(0);
+        setValue('');
+    };
+    reader.onerror = function (error) {
+        console.log('Error: ', error);
+    }
+    setFile(file);
+  };
+  
   return (
     <WidgetWrapper>
-      <StyledTitle size="sm">BSC Multisend transaction builder</StyledTitle>
+      <StyledTitle size="sm">Multisend transaction builder with drag and drop</StyledTitle>
       <StyledText size="sm">
         This app allows you to build a custom multisend transaction.
         <br />
@@ -263,7 +287,6 @@ const Dashboard = () => {
           footer={<ModalFooterConfirmation handleOk={handleSubmit} handleCancel={handleDismiss} />}
         />
       )}
-
       {/* ABI Input */}
       <TextField value={addressOrAbi} label="Enter Contract Address or ABI" onChange={handleAddressOrABI} />
       {loadAbiError && (
@@ -276,6 +299,8 @@ const Dashboard = () => {
       {contract && (
         <>
           <Title size="xs">Transaction information</Title>
+          <Text size="lg">Drag and drop an array of transactions to execute</Text>
+          <FileUploader handleChange={handleChange} name="file" types={fileTypes} />
 
           {!contract?.methods.length && <Text size="lg">Contract ABI doesn't have any public methods.</Text>}
 
