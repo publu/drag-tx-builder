@@ -8,6 +8,7 @@ import {
   ModalFooterConfirmation,
   ButtonLink,
   Link,
+  Checkbox,
 } from '@gnosis.pm/safe-react-components';
 import React, { useState, useCallback } from 'react';
 import { useSafeAppsSDK } from '@gnosis.pm/safe-apps-react-sdk';
@@ -85,6 +86,7 @@ const Dashboard = () => {
   const [addTxError, setAddTxError] = useState<string | undefined>();
   const [transactions, setTransactions] = useState<ProposedTransaction[]>([]);
   const [value, setValue] = useState('');
+  const [drag, setDrag] = useState(false);
 
   const handleAddressOrABI = async (e: React.ChangeEvent<HTMLInputElement>): Promise<ContractInterface | void> => {
     setContract(undefined);
@@ -266,7 +268,7 @@ const Dashboard = () => {
       <StyledText size="sm">
         This app allows you to build a custom multisend transaction.
         <br />
-        Enter a Binance Smart Chain Mainnet contract address or ABI to get started.
+        Enter a contract address or ABI to get started.
         <br />
         <Link
           href="https://help.gnosis-safe.io/en/articles/4680071-create-a-batched-transaction-with-the-transaction-builder-safe-app"
@@ -288,19 +290,27 @@ const Dashboard = () => {
         />
       )}
       {/* ABI Input */}
-      <TextField value={addressOrAbi} label="Enter Contract Address or ABI" onChange={handleAddressOrABI} />
+      <Checkbox
+      name="checkbox"
+      checked={drag}
+      onChange={(_, checked) => setDrag(checked)}
+      label="Use JSON"
+      />
+      <br />
+      {
+        !drag && (<TextField value={addressOrAbi} label="Enter Contract Address or ABI" onChange={handleAddressOrABI} />)
+      }
       {loadAbiError && (
         <Text color="error" size="lg">
           There was a problem trying to load the ABI
         </Text>
       )}
-
+      <br />
       {/* ABI Loaded */}
       {contract && (
         <>
           <Title size="xs">Transaction information</Title>
           <Text size="lg">Drag and drop an array of transactions to execute</Text>
-          <FileUploader handleChange={handleChange} name="file" types={fileTypes} />
 
           {!contract?.methods.length && <Text size="lg">Contract ABI doesn't have any public methods.</Text>}
 
@@ -444,6 +454,25 @@ const Dashboard = () => {
           </ButtonContainer>
         </>
       )}
+
+    {
+      drag && (
+        <div>
+          <FileUploader handleChange={handleChange} name="file" types={fileTypes} />
+              <ButtonContainer>
+                  <Button
+                    size="md"
+                    disabled={!transactions.length}
+                    variant="contained"
+                    color="primary"
+                    onClick={() => setReviewing(true)}
+                  >
+              {`Send Transactions ${transactions.length ? `(${transactions.length})` : ''}`}
+            </Button>
+          </ButtonContainer>
+        </div>
+      )
+    }
     </WidgetWrapper>
   );
 };
