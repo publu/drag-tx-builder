@@ -10,7 +10,7 @@ import {
   Link,
   Checkbox,
 } from '@gnosis.pm/safe-react-components';
-import React, { useState, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useSafeAppsSDK } from '@gnosis.pm/safe-apps-react-sdk';
 import Box from '@material-ui/core/Box';
 import styled from 'styled-components';
@@ -48,7 +48,7 @@ const StyledExamples = styled.div`
   }
 `;
 
-const ModalBody = ({ txs, deleteTx }: { txs: Array<ProposedTransaction>; deleteTx: (index: number) => void }) => {
+const ModalBody = ({ txs/*, deleteTx */}: { txs: Array<ProposedTransaction>;/* deleteTx: (index: number) => void */}) => {
   return (
     <>
       {txs.map((tx, index) => (
@@ -60,9 +60,11 @@ const ModalBody = ({ txs, deleteTx }: { txs: Array<ProposedTransaction>; deleteT
           justifyContent="space-between"
           width="100%"
         >
+          {/*
           <Button size="md" variant="outlined" iconType="delete" color="error" onClick={() => deleteTx(index)}>
             {''}
           </Button>
+          */}
           <Text size="lg">{tx.description}</Text>
         </Box>
       ))}
@@ -76,6 +78,8 @@ const Dashboard = () => {
   const services = useServices('BSC_MAINNET');
 
   const [addressOrAbi, setAddressOrAbi] = useState('');
+  const [batchSize, setBatchSize] = useState('');
+
   const [loadAbiError, setLoadAbiError] = useState(false);
   const [showExamples, setShowExamples] = useState(false);
   const [toAddress, setToAddress] = useState('');
@@ -85,8 +89,20 @@ const Dashboard = () => {
   const [inputCache, setInputCache] = useState<string[]>([]);
   const [addTxError, setAddTxError] = useState<string | undefined>();
   const [transactions, setTransactions] = useState<ProposedTransaction[]>([]);
+  const [allTransactions, setAllTransactions] = useState<ProposedTransaction[][]>([]);
   const [value, setValue] = useState('');
   const [drag, setDrag] = useState(false);
+  const [currentBatch, setCurrentBatch] = useState<ProposedTransaction[]>([]);
+
+  const handleBatchSize = async (e: React.ChangeEvent<HTMLInputElement>): Promise<ContractInterface | void> => {
+
+    const cleanInput = e.currentTarget?.value?.trim();
+    setBatchSize(cleanInput);
+
+    if (!cleanInput || !services.web3 || !services.interfaceRepo || !(Number(cleanInput)>0) ) {
+      return;
+    }
+  };
 
   const handleAddressOrABI = async (e: React.ChangeEvent<HTMLInputElement>): Promise<ContractInterface | void> => {
     setContract(undefined);
@@ -188,13 +204,12 @@ const Dashboard = () => {
 
       setInputCache([]);
       setTransactions(transactions);
-      console.log("transactions:", transactions);
       setSelectedMethodIndex(0);
       setValue('');
     } catch (e) {
       console.error(e);
     }
-  }, [services, transactions, toAddress, value, contract, selectedMethodIndex, inputCache]);
+  }, [services, transactions, toAddress, value, contract, selectedMethodIndex, inputCache, batchSize]);
 
   const deleteTransaction = useCallback(
     async (inputIndex: number) => {
@@ -240,6 +255,40 @@ const Dashboard = () => {
     }
   };
   
+  const batches = useMemo(
+    () => {
+      let chunkSize = Number(batchSize);
+      console.log("chunkSize", chunkSize)
+
+      if(transactions.length == 0){
+        return 0;
+      } else {
+
+        if(chunkSize == 0) {
+          chunkSize = transactions.length;
+        } 
+
+        let allTxs: ProposedTransaction[][] = [];
+
+        allTxs.push(transactions.slice(0, 0 + chunkSize));
+
+        if(allTxs[0].length != transactions.length){
+          for (let i = chunkSize; i < transactions.length; i += chunkSize) {
+            const chunk = transactions.slice(i, i + chunkSize);
+            console.log("chunk", chunk)
+            allTxs.push(chunk)
+          }
+        }
+
+        setAllTransactions(allTxs);
+
+        console.log("transactions:", allTxs);
+        return allTxs.length;
+      }
+    },
+    [transactions, batchSize],
+  );
+
   const fileTypes = ["json"];
   const [file, setFile] = useState(null);
   const handleChange = (file: any) => {
@@ -251,8 +300,11 @@ const Dashboard = () => {
         const data = String(reader.result).split(",")[1]
         console.log(JSON.parse(atob(String(data))))
         setInputCache([]);
-        setTransactions(JSON.parse(atob(String(data))));
-        console.log("transactions:", JSON.parse(atob(String(data))));
+        
+        const txs = JSON.parse(atob(String(data)))
+
+        setTransactions(txs);
+        console.log("transactions:", txs);
         setSelectedMethodIndex(0);
         setValue('');
     };
@@ -281,9 +333,10 @@ const Dashboard = () => {
       </StyledText>
 
       {/* TXs MODAL */}
-      {reviewing && transactions.length > 0 && (
+      {reviewing && currentBatch.length > 0 && (
+
         <GenericModal
-          body={<ModalBody txs={transactions} deleteTx={deleteTransaction} />}
+          body={<ModalBody txs={currentBatch} /*deleteTx={deleteTransaction}*/ />}
           onClose={handleDismiss}
           title="Send Transactions"
           footer={<ModalFooterConfirmation handleOk={handleSubmit} handleCancel={handleDismiss} />}
@@ -296,6 +349,8 @@ const Dashboard = () => {
       onChange={(_, checked) => setDrag(checked)}
       label="Use JSON"
       />
+      <br />
+      <TextField value={batchSize} label="Batch Size" onChange={handleBatchSize} />
       <br />
       {
         !drag && (<TextField value={addressOrAbi} label="Enter Contract Address or ABI" onChange={handleAddressOrABI} />)
@@ -433,6 +488,7 @@ const Dashboard = () => {
           <br />
 
           {/* Actions */}
+
           <ButtonContainer>
             {isValueInputVisible() || contract.methods.length > 0 ? (
               <Button size="md" color="primary" onClick={() => addTransaction()}>
@@ -454,22 +510,30 @@ const Dashboard = () => {
           </ButtonContainer>
         </>
       )}
-
+    
     {
       drag && (
         <div>
           <FileUploader handleChange={handleChange} name="file" types={fileTypes} />
+          Number of batches: {batches} 
+          {
+            allTransactions.map((txs, index) =>
               <ButtonContainer>
-                  <Button
-                    size="md"
-                    disabled={!transactions.length}
-                    variant="contained"
-                    color="primary"
-                    onClick={() => setReviewing(true)}
-                  >
-              {`Send Transactions ${transactions.length ? `(${transactions.length})` : ''}`}
-            </Button>
-          </ButtonContainer>
+                <Button
+                  size="md"
+                  disabled={!txs.length}
+                  variant="contained"
+                  color="primary"
+                  onClick={() => {
+                    setCurrentBatch(txs)
+                    setReviewing(true)
+                  }}
+                >
+                  {`Send Transactions ${txs.length ? `(${txs.length})` : ''}`}
+                </Button>
+              </ButtonContainer>
+
+          )}
         </div>
       )
     }
